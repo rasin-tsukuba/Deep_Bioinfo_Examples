@@ -20,7 +20,7 @@ class MLP(torch.nn.Module):
         self.dropout_layer_1 = torch.nn.Dropout(p=self.drop_p)
         self.hidden_layer_1 = torch.nn.Linear(self.n_hidden_1, self.n_hidden_2)
         self.dropout_layer_2 = torch.nn.Dropout(p=self.drop_p)
-        self.output_layer = torch.nn.Linear(self.n_hidden_2, self.n_outpupt)
+        self.output_layer = torch.nn.Linear(self.n_hidden_1, self.n_outpupt)
 
     def forward(self, x):
         x = self.dropout_layer_1(torch.nn.functional.relu(self.input_layer(x)))
@@ -52,20 +52,15 @@ def load_Pfam(name_list_pickle, model_name_list_pickle):
         encoding.append(single_encoding)
     return encoding
 
-
-
-
 def train(model, device, data, opt, e):
     model.train()
 
     for batch_idx, (feature, label) in enumerate(data):
 
         feature, label = feature.to(device), label.long().to(device)
-        #print(feature.shape, feature.device, label.shape, label.device)
         opt.zero_grad()
         output = model.forward(feature)
-        #print(output.shape, output.device, label)
-        loss = F.nll_loss(output, label)
+        loss = F.cross_entropy(output, label)
         loss.backward()
         opt.step()
         if batch_idx % 100 == 0:
@@ -74,7 +69,7 @@ def train(model, device, data, opt, e):
                 batch_idx * len(feature),
                 len(data.dataset),
                 100. * batch_idx / len(data),
-                np.exp(loss.item())))
+                loss.item()))
 
 
 def test(model, device, test_loader):
@@ -86,14 +81,14 @@ def test(model, device, test_loader):
         for data, target in test_loader:
             data, target = data.to(device), target.long().to(device)
             output = model(data)
-            test_loss += F.nll_loss(output, target, reduction='sum').item()  # sum up batch loss
+            test_loss += F.cross_entropy(output, target, reduction='sum').item()  # sum up batch loss
             pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
 
     print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-        np.exp(test_loss), correct, len(test_loader.dataset),
+        test_loss, correct, len(test_loader.dataset),
         100. * correct / len(test_loader.dataset)))
 
 def main():
@@ -114,9 +109,9 @@ def main():
     # total number of feature, useful for define network structure
     number_features = 16306
     # stochastic gradient descent, training batch size
-    batch_size = 32
+    batch_size = 1024
     # training epoches
-    epochs = 100
+    epochs = 5
 
     # data loading
     enzyme_feature = load_Pfam('Pfam_name_list_new_data.pickle', 'Pfam_model_names_list.pickle')
@@ -151,9 +146,9 @@ def main():
     print("dataloader done")
     # Instantiate
     model = MLP(n_input=number_features,
-              n_hidden_1=batch_size // 2,
+              n_hidden_1=batch_size,
               n_hidden_2=batch_size,
-              n_output=2,
+              n_output=number_class,
               drop_p=0.3).cuda()
     print(model)
     print("model instantiated")
